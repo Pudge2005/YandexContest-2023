@@ -138,11 +138,104 @@ namespace YandexContest
 
         private sealed class TradesMerger
         {
-            private readonly List<BuySellTrade> _trades;
+            private readonly struct TradesMergingHelper
+            {
+                private readonly LinkedListNode<BuySellTrade> _node;
+
+
+                public TradesMergingHelper(LinkedListNode<BuySellTrade> node)
+                {
+                    _node = node;
+                }
+
+
+                public readonly bool CanMergeLeft => _node.Previous != null;
+                public readonly bool CanMergeRight => _node.Next != null;
+
+
+                public readonly int MergeLeftProfit
+                {
+                    get
+                    {
+                        var leftNode = _node.Previous;
+
+                        if (leftNode == null)
+                            return int.MinValue;
+
+                        var leftTrade = leftNode.Value;
+                        var mergedProfit = _node.Value.Sell.Price - leftTrade.Buy.Price;
+                        return mergedProfit - leftTrade.Profit;
+                    }
+                }
+
+                public readonly int MergeRightProfit
+                {
+                    get
+                    {
+                        var rightNode = _node.Next;
+
+                        if (rightNode == null)
+                            return int.MinValue;
+
+                        var rightTrade = rightNode.Value;
+                        var mergedProfit = rightTrade.Sell.Price - _node.Value.Buy.Price;
+                        return mergedProfit - rightTrade.Profit;
+                    }
+                }
+
+
+                public readonly void MergeLeft()
+                {
+                    var leftNode = _node.Previous;
+                    leftNode!.Value = BuySellTrade.Merge(leftNode.Value, _node.Value);
+                    Destroy();
+                }
+
+                public readonly void MergeRight()
+                {
+                    var rightNode = _node.Next;
+                    rightNode!.Value = BuySellTrade.Merge(_node.Value, rightNode.Value);
+                    Destroy();
+                }
+
+                public readonly void Destroy()
+                {
+                    _node.List!.Remove(_node);
+
+                }
+
+                public readonly void Merge()
+                {
+                    int leftProfit = MergeLeftProfit;
+                    int rightProfit = MergeRightProfit;
+
+                    bool canMergeLeft = leftProfit > 0;
+                    bool shouldMergeRight = rightProfit > 0 && rightProfit > leftProfit;
+
+                    if (shouldMergeRight)
+                    {
+                        MergeRight();
+                    }
+                    else if (canMergeLeft)
+                    {
+                        MergeLeft();
+                    }
+                    else
+                    {
+                        Destroy();
+                    }
+                }
+            }
+
+
+            private static readonly IPool<List<LinkedListNode<BuySellTrade>>> _tradeNodesPool =
+                ListsPool<LinkedListNode<BuySellTrade>>.Create();
+
+            private readonly LinkedList<BuySellTrade> _trades;
             private readonly int _maxTradePairsCount;
 
 
-            public TradesMerger(List<BuySellTrade> trades, int maxTradePairsCount)
+            public TradesMerger(LinkedList<BuySellTrade> trades, int maxTradePairsCount)
             {
                 _trades = trades;
                 _maxTradePairsCount = maxTradePairsCount;
@@ -159,91 +252,67 @@ namespace YandexContest
 
             private void Merge()
             {
-                var minTradeIndex = FindMinIndex();
-                _ = TryMerge(minTradeIndex);
+                var minTradeNodes = _tradeNodesPool.Rent();
+                FindMinTradeNodes(minTradeNodes);
+                Merge(minTradeNodes);
+                _tradeNodesPool.Return(minTradeNodes);
             }
 
-            private bool TryMerge(int index)
+            private void FindMinTradeNodes(List<LinkedListNode<BuySellTrade>> minTradeNodes)
             {
-                bool canMergeLeft = index > 0;
-                bool canMergeRight = index < _trades.Count - 1;
-                var minTrade = _trades[index];
-                _trades.RemoveAt(index);
+                var minTrade = _trades.First;
+                int minProfit = minTrade!.Value.Profit;
+                minTradeNodes.Add(minTrade);
 
-                var leftTrade = canMergeLeft
-                    ? _trades[index - 1]
-                    : default;
+                var curNode = minTrade.Next;
 
-                var rightTrade = canMergeRight
-                    ? _trades[index]
-                    : default;
-
-                BuySellTrade leftMergedTrade = canMergeLeft
-                    ? BuySellTrade.Merge(leftTrade, minTrade)
-                    : default;
-
-                BuySellTrade rightMergedTrade = canMergeRight
-                    ? BuySellTrade.Merge(minTrade, rightTrade)
-                    : default;
-
-                int leftMergeProfit = canMergeLeft
-                    ? leftMergedTrade.Profit - leftTrade.Profit
-                    : int.MinValue;
-
-                int rightMergeProfit = canMergeRight
-                    ? rightMergedTrade.Profit - rightTrade.Profit
-                    : int.MinValue;
-
-                canMergeLeft = leftMergeProfit > 0;
-                canMergeRight = rightMergeProfit > 0 && rightMergeProfit > leftMergeProfit;
-
-                if (canMergeRight)
+                while (curNode != null)
                 {
-                    // Merging right.
+                    var profit = curNode.Value.Profit;
 
-                    _trades[index] = rightMergedTrade;
-                    return true;
-                }
-                else if (canMergeLeft)
-                {
-                    // Mergint left.
+                    if (profit == minProfit)
+                    {
+                        minTradeNodes.Add(curNode);
+                    }
+                    else if (profit < minProfit)
+                    {
+                        minTradeNodes.Clear();
+                        minTradeNodes.Add(curNode);
+                        minProfit = profit;
+                    }
 
-                    _trades[index - 1] = leftMergedTrade;
-                    return true;
-                }
-                else
-                {
-                    return false;
+                    curNode = curNode.Next;
                 }
             }
 
-            private int FindMinIndex()
+            private static void Merge(IReadOnlyList<LinkedListNode<BuySellTrade>> minTradeNodes)
             {
-#pragma warning disable IDE0018 // Объявление встроенной переменной
-                int minProfit;
-                int minIndex;
-#pragma warning restore IDE0018 // Объявление встроенной переменной
-                var span = CollectionsMarshal.AsSpan(_trades);
-                SetAsMin(0, out minProfit, out minIndex, in span);
-                var len = span.Length;
+                int minMaxProfitIndex = 0;
+                int minMaxProfit = GetMaxProfit(0);
 
-                for (int i = 0; i < len; i++)
+                for (int i = 1; i < minTradeNodes.Count; i++)
                 {
-                    if (span[i].Profit < minProfit)
-                        SetAsMin(in i, out minProfit, out minIndex, in span);
+                    var maxProfit = GetMaxProfit(i);
+
+                    if (maxProfit < minMaxProfit)
+                    {
+                        minMaxProfit = maxProfit;
+                        minMaxProfitIndex = i;
+                    }
                 }
 
-                return minIndex;
-            }
+                var helper = new TradesMergingHelper(minTradeNodes[minMaxProfitIndex]);
+                helper.Merge();
 
 
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            private static void SetAsMin(in int index, out int minProfit, out int minIndex, in Span<BuySellTrade> span)
-            {
-                minProfit = span[index].Profit;
-                minIndex = index;
+                int GetMaxProfit(int index)
+                {
+                    var helper = new TradesMergingHelper(minTradeNodes[index]);
+                    return Math.Max(helper.MergeLeftProfit, helper.MergeRightProfit);
+                }
             }
         }
+
 
         public static void Solve()
         {
@@ -264,13 +333,13 @@ namespace YandexContest
             }
         }
 
-        private static void MergeTradesUpTo(List<BuySellTrade> trades, int maxPairsCount)
+        private static void MergeTradesUpTo(LinkedList<BuySellTrade> trades, int maxPairsCount)
         {
             var merger = new TradesMerger(trades, maxPairsCount);
             merger.StartMerging();
         }
 
-        private static List<BuySellTrade> GetTrades()
+        private static LinkedList<BuySellTrade> GetTrades()
         {
             var prices = GetPrices();
             var trades = GetTrades(prices);
@@ -283,10 +352,10 @@ namespace YandexContest
             return InOutUtils.Read.ArrayOf.Ints();
         }
 
-        private static List<BuySellTrade> GetTrades(int[] prices)
+        private static LinkedList<BuySellTrade> GetTrades(int[] prices)
         {
             var len = prices.Length;
-            var trades = new List<BuySellTrade>(len);
+            var trades = new LinkedList<BuySellTrade>();
 
             DayPrice buy = default;
             bool wannaBuy = true;
@@ -316,7 +385,7 @@ namespace YandexContest
                     {
                         // price is localMax.
 
-                        trades.Add(new(buy, new(i, prevPrice)));
+                        trades.AddLast(new BuySellTrade(buy, new(i, prevPrice)));
                         wannaBuy = true;
                     }
                 }
@@ -328,7 +397,7 @@ namespace YandexContest
             {
                 if (prevPrice > buy.Price)
                 {
-                    trades.Add(new(buy, new(len, prevPrice)));
+                    trades.AddLast(new BuySellTrade(buy, new(len, prevPrice)));
                 }
             }
 

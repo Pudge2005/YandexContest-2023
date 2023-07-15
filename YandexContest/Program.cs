@@ -5,20 +5,23 @@ internal class Program
 {
     private static void Main()
     {
-        var tester = PrepareTester();
-        AddTests(tester);
-
-        System.Action method = TaskC.Solve;
-
-        var results = tester.StartTests(method, true, true);
-
-        foreach (var result in results)
+        for (int i = 0; i < 1000; i++)
         {
-            Console.WriteLine(result);
-        }
+            var tester = PrepareTester();
+            AddTests(tester);
 
-        string input = Console.ReadLine()!;
-        Console.WriteLine(input);
+            System.Action method = TaskC.Solve;
+
+            var results = tester.StartTests(method, true, true);
+
+            foreach (var result in results)
+            {
+                Console.WriteLine(result);
+            }
+        }
+     
+
+        Console.WriteLine("конец епта");
     }
 
     private static InOutTester PrepareTester()

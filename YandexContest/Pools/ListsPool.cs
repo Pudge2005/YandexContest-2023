@@ -1,8 +1,15 @@
 ﻿namespace DevourDev.SheetCodeUtility
 {
+    public interface IPool<T> where T : class
+    {
+        T Rent();
+        void Return(T rentedItem);
+        void Clear();
+    }
+
     public static class ListsPool<T>
     {
-        private class ListsPoolHelper
+        private class ListsPoolHelper : IPool<List<T>>
         {
             private readonly object _lockObj = new();
 
@@ -15,7 +22,9 @@
             }
 
 
-            public List<T> Rent(int minCapacity = 0)
+            public List<T> Rent() => Rent(0);
+
+            public List<T> Rent(int minCapacity)
             {
                 lock (_lockObj)
                 {
@@ -30,11 +39,17 @@
 
             public void Return(List<T> item)
             {
+                item.Clear();
+
                 lock (_lockObj)
                 {
-                    item.Clear();
                     _stack.Push(item);
                 }
+            }
+
+            public void Clear()
+            {
+                _stack.Clear();
             }
         }
 
@@ -48,6 +63,11 @@
         private static readonly ListsPoolHelper _smallListsPool = new();
         private static readonly ListsPoolHelper _mimicListsPool = new();
 
+
+        public static IPool<List<T>> Create()
+        {
+            return new ListsPoolHelper();
+        }
 
         public static List<T> Rent(int minCapacity = 0)
         {
@@ -67,7 +87,7 @@
             {
                 >= _largeCount => _largeListsPool,
                 >= _mediumCount => _mediumListsPool,
-                >=_smallCount => _smallListsPool,
+                >= _smallCount => _smallListsPool,
                 _ => _mimicListsPool,
             };
         }
