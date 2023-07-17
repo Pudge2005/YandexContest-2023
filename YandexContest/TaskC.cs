@@ -1,8 +1,4 @@
 ﻿using DevourDev.SheetCodeUtility;
-using System.Diagnostics;
-using System.Runtime;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 
 namespace YandexContest
 {
@@ -201,7 +197,6 @@ namespace YandexContest
                 public readonly void Destroy()
                 {
                     _node.List!.Remove(_node);
-
                 }
 
                 public readonly void Merge()
@@ -321,6 +316,8 @@ namespace YandexContest
 
         private static void SolveImpl1()
         {
+            // 1, x, x, x,  x, 22, x, 2, x, 1232, x, 213, 636, 222, 333, 1, 22, x, x
+
             var trades = GetTrades();
 
             MergeTradesUpTo(trades, 2);

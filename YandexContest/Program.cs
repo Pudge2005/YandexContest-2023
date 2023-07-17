@@ -5,28 +5,40 @@ internal class Program
 {
     private static void Main()
     {
-        for (int i = 0; i < 1000; i++)
+
+        var tester = PrepareTester();
+        //AddTests(tester);
+        ДобавитьТестИгната(tester);
+
+        System.Action method = TaskC.Solve;
+
+        var results = tester.StartTests(method, true, true);
+
+        foreach (var result in results)
         {
-            var tester = PrepareTester();
-            AddTests(tester);
-
-            System.Action method = TaskC.Solve;
-
-            var results = tester.StartTests(method, true, true);
-
-            foreach (var result in results)
-            {
-                Console.WriteLine(result);
-            }
+            Console.WriteLine(result);
         }
-     
+
 
         Console.WriteLine("конец епта");
+    }
+
+    private static void ДобавитьТестИгната(InOutTester tester)
+    {
+        tester.GetTestBuilder()
+            .WriteLine("7")
+            .WriteLine("1 3 5 1 100 1 2")
+            .BeginExpectedOutput()
+            .WriteLine("2")
+            .WriteLine("1 3")
+            .WriteLine("4 5")
+            .AddTest();
     }
 
     private static InOutTester PrepareTester()
     {
         var tester = new InOutTester();
+        return tester;
 
         tester.GetTestBuilder()
             .WriteLine("6")
@@ -50,7 +62,6 @@ internal class Program
             .WriteLine("0")
             .AddTest();
 
-        return tester;
     }
 
     private static void AddTests(InOutTester tester)
